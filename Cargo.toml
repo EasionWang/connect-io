@@ -1,10 +1,10 @@
 [package]
 name = "connect-io"
-version = "0.1.0"
+version = "0.1.1"
 edition = "2024"
 description = "Unified async/sync transport library for TCP, UDP, and Serial protocols"
-license = "MIT"  # 或 "Apache-2.0" 等
-repository = "https://github.com/Easion_Wang/connect-io"
+license = "MIT"
+repository = "https://github.com/EasionWang/connect-io"
 
 [features]
 default = ["tcp", "udp", "serial"]
