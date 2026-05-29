@@ -1,0 +1,46 @@
+[package]
+name = "connect-io"
+version = "0.1.0"
+edition = "2024"
+description = "Unified async/sync transport library for TCP, UDP, and Serial protocols"
+license = "MIT"  # 或 "Apache-2.0" 等
+repository = "https://github.com/Easion_Wang/connect-io"
+
+[features]
+default = ["tcp", "udp", "serial"]
+tcp = ["tokio/net"]
+udp = ["tokio/net"]
+serial = ["dep:serialport", "dep:tokio-serial"]
+async = ["dep:tokio", "dep:async-trait"]
+
+[dependencies]
+serialport = { version = "4.3", optional = true }
+thiserror = "1"
+log = "0.4"
+tokio = { version = "1", features = ["rt-multi-thread", "macros", "io-util"], optional = true }
+async-trait = { version = "0.1", optional = true }
+tokio-serial = { version = "5.4", optional = true }
+
+[[example]]
+name = "tcp_client"
+required-features = ["tcp", "async", "tokio/rt"]
+
+[[example]]
+name = "tcp_server"
+required-features = ["tcp", "async", "tokio/rt"]
+
+[[example]]
+name = "udp_client"
+required-features = ["udp", "async", "tokio/rt"]
+
+[[example]]
+name = "udp_server"
+required-features = ["udp", "async", "tokio/rt"]
+
+[[example]]
+name = "serial_client"
+required-features = ["serial", "async", "tokio/rt"]
+
+[[example]]
+name = "serial_server"
+required-features = ["serial", "async", "tokio/rt"]
