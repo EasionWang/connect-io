@@ -12,6 +12,7 @@ tcp = ["tokio/net"]
 udp = ["tokio/net"]
 serial = ["dep:serialport", "dep:tokio-serial"]
 async = ["dep:tokio", "dep:async-trait"]
+tauri = ["dep:tauri", "dep:serde", "dep:serde_json", "async"]
 
 [dependencies]
 serialport = { version = "4.3", optional = true }
@@ -20,6 +21,9 @@ log = "0.4"
 tokio = { version = "1", features = ["rt-multi-thread", "macros", "io-util"], optional = true }
 async-trait = { version = "0.1", optional = true }
 tokio-serial = { version = "5.4", optional = true }
+tauri = { version = "2", optional = true }
+serde = { version = "1", features = ["derive"], optional = true }
+serde_json = { version = "1", optional = true }
 
 [[example]]
 name = "tcp_client"
