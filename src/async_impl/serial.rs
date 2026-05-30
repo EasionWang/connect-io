@@ -9,7 +9,6 @@
 use crate::async_impl::{AsyncTransport, AsyncTransportConfig, ConnectionState};
 use crate::TransportError;
 use async_trait::async_trait;
-use std::net::SocketAddr;
 use std::time::Duration;
 use tokio::io::{AsyncRead, AsyncWrite};
 use tokio_serial::SerialPortBuilderExt;

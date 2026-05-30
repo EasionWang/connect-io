@@ -9,7 +9,7 @@
 use crate::async_impl::{AsyncTransport, AsyncTransportConfig, ConnectionState};
 use crate::TransportError;
 use async_trait::async_trait;
-use std::net::SocketAddr;
+use std::net::{Ipv4Addr, Ipv6Addr, SocketAddr};
 use std::time::Duration;
 use tokio::io::{AsyncRead, AsyncWrite};
 use tokio::net::UdpSocket;
@@ -149,16 +149,6 @@ impl AsyncTransport for AsyncUdpTransport {
 /// 仅在已连接模式下可用，委托给 `UdpSocket::poll_recv`。
 /// 如果未连接，返回 `NotConnected` 错误。
 impl AsyncRead for AsyncUdpTransport {
-    /// 异步从 UDP socket 读取数据
-    ///
-    /// # Arguments
-    /// * `cx` - 异步上下文
-    /// * `buf` - 读取缓冲区
-    ///
-    /// # Returns
-    /// - `Poll::Ready(Ok(()))` - 读取成功
-    /// - `Poll::Ready(Err(NotConnected))` - 未连接
-    /// - `Poll::Pending` - 暂无数据
     fn poll_read(
         self: std::pin::Pin<&mut Self>,
         cx: &mut std::task::Context<'_>,
@@ -173,12 +163,8 @@ impl AsyncRead for AsyncUdpTransport {
         }
 
         let socket = &this.socket;
-        let mut recv_buf = vec![0u8; buf.remaining()];
-        match socket.poll_recv(cx, &mut recv_buf) {
-            std::task::Poll::Ready(Ok(n)) => {
-                buf.put_slice(&recv_buf[..n]);
-                std::task::Poll::Ready(Ok(()))
-            }
+        match socket.poll_recv(cx, buf) {
+            std::task::Poll::Ready(Ok(())) => std::task::Poll::Ready(Ok(())),
             std::task::Poll::Ready(Err(e)) => std::task::Poll::Ready(Err(e)),
             std::task::Poll::Pending => std::task::Poll::Pending,
         }
@@ -273,5 +259,146 @@ impl AsyncUdpTransport {
         let (n, addr) = self.socket.recv_from(buf).await
             .map_err(|e| TransportError::ConnectionFailed(e.to_string()))?;
         Ok((n, addr))
+    }
+
+    // ============================================================
+    // 广播
+    // ============================================================
+
+    /// 设置 UDP socket 的广播模式
+    ///
+    /// 启用后，socket 可以向广播地址（如 255.255.255.255）发送数据报。
+    /// 默认情况下广播是关闭的。
+    ///
+    /// # Arguments
+    /// * `flag` - true 启用广播，false 禁用
+    ///
+    /// # Returns
+    /// - `Ok(())` - 设置成功
+    /// - `Err(Io(...))` - 系统调用失败
+    pub fn set_broadcast(&self, flag: bool) -> Result<(), TransportError> {
+        self.socket.set_broadcast(flag)?;
+        Ok(())
+    }
+
+    // ============================================================
+    // 组播 (IPv4)
+    // ============================================================
+
+    /// 加入 IPv4 组播组
+    ///
+    /// 将 socket 加入指定的 IPv4 组播地址，之后可以接收发往该组播地址的数据报。
+    ///
+    /// # Arguments
+    /// * `multiaddr` - 要加入的组播地址（如 224.0.0.1）
+    /// * `iface` - 加入组播组使用的本地接口地址（如 0.0.0.0 表示任意接口）
+    ///
+    /// # Returns
+    /// - `Ok(())` - 加入成功
+    /// - `Err(Io(...))` - 加入失败
+    pub fn join_multicast_v4(
+        &self,
+        multiaddr: Ipv4Addr,
+        iface: Ipv4Addr,
+    ) -> Result<(), TransportError> {
+        self.socket.join_multicast_v4(multiaddr, iface)?;
+        Ok(())
+    }
+
+    /// 离开 IPv4 组播组
+    ///
+    /// # Arguments
+    /// * `multiaddr` - 要离开的组播地址
+    /// * `iface` - 离开组播组使用的本地接口地址
+    ///
+    /// # Returns
+    /// - `Ok(())` - 离开成功
+    /// - `Err(Io(...))` - 离开失败
+    pub fn leave_multicast_v4(
+        &self,
+        multiaddr: Ipv4Addr,
+        iface: Ipv4Addr,
+    ) -> Result<(), TransportError> {
+        self.socket.leave_multicast_v4(multiaddr, iface)?;
+        Ok(())
+    }
+
+    /// 设置 IPv4 组播数据是否回环到本地 socket
+    ///
+    /// # Arguments
+    /// * `flag` - true 启用回环，false 禁用
+    ///
+    /// # Returns
+    /// - `Ok(())` - 设置成功
+    /// - `Err(Io(...))` - 系统调用失败
+    pub fn set_multicast_loop_v4(&self, flag: bool) -> Result<(), TransportError> {
+        self.socket.set_multicast_loop_v4(flag)?;
+        Ok(())
+    }
+
+    /// 设置 IPv4 组播数据报的 TTL（生存时间）
+    ///
+    /// # Arguments
+    /// * `ttl` - TTL 值（1-255），1 表示仅本地网络
+    ///
+    /// # Returns
+    /// - `Ok(())` - 设置成功
+    /// - `Err(Io(...))` - 系统调用失败
+    pub fn set_multicast_ttl_v4(&self, ttl: u32) -> Result<(), TransportError> {
+        self.socket.set_multicast_ttl_v4(ttl)?;
+        Ok(())
+    }
+
+    // ============================================================
+    // 组播 (IPv6)
+    // ============================================================
+
+    /// 加入 IPv6 组播组
+    ///
+    /// # Arguments
+    /// * `multiaddr` - 要加入的 IPv6 组播地址（如 ff02::1）
+    /// * `iface` - 接口索引（0 表示默认接口）
+    ///
+    /// # Returns
+    /// - `Ok(())` - 加入成功
+    /// - `Err(Io(...))` - 加入失败
+    pub fn join_multicast_v6(
+        &self,
+        multiaddr: Ipv6Addr,
+        iface: u32,
+    ) -> Result<(), TransportError> {
+        self.socket.join_multicast_v6(&multiaddr, iface)?;
+        Ok(())
+    }
+
+    /// 离开 IPv6 组播组
+    ///
+    /// # Arguments
+    /// * `multiaddr` - 要离开的 IPv6 组播地址
+    /// * `iface` - 接口索引
+    ///
+    /// # Returns
+    /// - `Ok(())` - 离开成功
+    /// - `Err(Io(...))` - 离开失败
+    pub fn leave_multicast_v6(
+        &self,
+        multiaddr: Ipv6Addr,
+        iface: u32,
+    ) -> Result<(), TransportError> {
+        self.socket.leave_multicast_v6(&multiaddr, iface)?;
+        Ok(())
+    }
+
+    /// 设置 IPv6 组播数据是否回环到本地 socket
+    ///
+    /// # Arguments
+    /// * `flag` - true 启用回环，false 禁用
+    ///
+    /// # Returns
+    /// - `Ok(())` - 设置成功
+    /// - `Err(Io(...))` - 系统调用失败
+    pub fn set_multicast_loop_v6(&self, flag: bool) -> Result<(), TransportError> {
+        self.socket.set_multicast_loop_v6(flag)?;
+        Ok(())
     }
 }

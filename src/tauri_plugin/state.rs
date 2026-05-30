@@ -6,13 +6,16 @@
  * @LastEditTime : 2026-05-30
  * @Description  : Tauri 集成层状态管理，管理多个活跃传输会话
  */
+#![allow(non_snake_case)]
 
 use std::collections::HashMap;
 use std::net::SocketAddr;
 use std::sync::{Arc, Mutex};
 
+use crate::async_impl::AsyncTransport;
 use crate::async_impl::AsyncTransportConfig;
 use crate::ConnectionState;
+use tauri::Emitter;
 use tokio::sync::mpsc;
 
 /// 会话命令：从 Tauri command 发送到后台读写任务
@@ -22,6 +25,21 @@ pub enum SessionCommand {
     Write { data: Vec<u8> },
     /// UDP 无连接模式发送数据到指定地址
     SendTo { data: Vec<u8>, addr: SocketAddr },
+    /// 设置 UDP 广播模式
+    #[cfg(feature = "udp")]
+    SetBroadcast { flag: bool },
+    /// 加入 IPv4 组播组
+    #[cfg(feature = "udp")]
+    JoinMulticastV4 { multiaddr: std::net::Ipv4Addr, iface: std::net::Ipv4Addr },
+    /// 离开 IPv4 组播组
+    #[cfg(feature = "udp")]
+    LeaveMulticastV4 { multiaddr: std::net::Ipv4Addr, iface: std::net::Ipv4Addr },
+    /// 加入 IPv6 组播组
+    #[cfg(feature = "udp")]
+    JoinMulticastV6 { multiaddr: std::net::Ipv6Addr, iface: u32 },
+    /// 离开 IPv6 组播组
+    #[cfg(feature = "udp")]
+    LeaveMulticastV6 { multiaddr: std::net::Ipv6Addr, iface: u32 },
     /// 关闭会话
     Close,
 }
@@ -87,8 +105,13 @@ impl AsyncSession {
 /// **重要约束**：持有锁期间禁止调用 Tauri 事件发送，
 /// 必须先 drop 锁再进行任何 IPC 操作。
 pub struct TransportState {
-    /// 活跃的异步传输实例集合，key 为 session_id
     sessions: Arc<Mutex<HashMap<String, AsyncSession>>>,
+}
+
+impl Default for TransportState {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl TransportState {
@@ -370,6 +393,133 @@ impl TransportState {
     }
 
     // ============================================================
+    // UDP 广播 / 组播
+    // ============================================================
+
+    /// 设置指定 UDP 会话的广播模式
+    ///
+    /// # 参数
+    /// - `session_id`: UDP 会话 ID
+    /// - `flag`: true 启用广播
+    ///
+    /// # 返回
+    /// - `Ok(())` - 设置成功
+    /// - `Err(String)` - session 不存在或非 UDP 会话
+    #[cfg(feature = "udp")]
+    pub fn set_broadcast(&self, session_id: &str, flag: bool) -> Result<(), String> {
+        let sessions = self
+            .sessions
+            .lock()
+            .map_err(|e| format!("Failed to lock sessions: {}", e))?;
+
+        let session = sessions.get(session_id)
+            .ok_or_else(|| format!("Session '{}' not found", session_id))?;
+
+        match &session.config {
+            AsyncTransportConfig::Udp { .. } => {}
+            _ => return Err("set_broadcast is only available for UDP sessions".to_string()),
+        }
+
+        let tx = session.tx.clone();
+        drop(sessions);
+
+        tx.blocking_send(SessionCommand::SetBroadcast { flag })
+            .map_err(|e| format!("Failed to send set_broadcast command: {}", e))
+    }
+
+    /// 加入 IPv4 组播组
+    #[cfg(feature = "udp")]
+    pub fn join_multicast_v4(&self, session_id: &str, multiaddr: std::net::Ipv4Addr, iface: std::net::Ipv4Addr) -> Result<(), String> {
+        let sessions = self
+            .sessions
+            .lock()
+            .map_err(|e| format!("Failed to lock sessions: {}", e))?;
+
+        let session = sessions.get(session_id)
+            .ok_or_else(|| format!("Session '{}' not found", session_id))?;
+
+        match &session.config {
+            AsyncTransportConfig::Udp { .. } => {}
+            _ => return Err("join_multicast_v4 is only available for UDP sessions".to_string()),
+        }
+
+        let tx = session.tx.clone();
+        drop(sessions);
+
+        tx.blocking_send(SessionCommand::JoinMulticastV4 { multiaddr, iface })
+            .map_err(|e| format!("Failed to send join_multicast_v4 command: {}", e))
+    }
+
+    /// 离开 IPv4 组播组
+    #[cfg(feature = "udp")]
+    pub fn leave_multicast_v4(&self, session_id: &str, multiaddr: std::net::Ipv4Addr, iface: std::net::Ipv4Addr) -> Result<(), String> {
+        let sessions = self
+            .sessions
+            .lock()
+            .map_err(|e| format!("Failed to lock sessions: {}", e))?;
+
+        let session = sessions.get(session_id)
+            .ok_or_else(|| format!("Session '{}' not found", session_id))?;
+
+        match &session.config {
+            AsyncTransportConfig::Udp { .. } => {}
+            _ => return Err("leave_multicast_v4 is only available for UDP sessions".to_string()),
+        }
+
+        let tx = session.tx.clone();
+        drop(sessions);
+
+        tx.blocking_send(SessionCommand::LeaveMulticastV4 { multiaddr, iface })
+            .map_err(|e| format!("Failed to send leave_multicast_v4 command: {}", e))
+    }
+
+    /// 加入 IPv6 组播组
+    #[cfg(feature = "udp")]
+    pub fn join_multicast_v6(&self, session_id: &str, multiaddr: std::net::Ipv6Addr, iface: u32) -> Result<(), String> {
+        let sessions = self
+            .sessions
+            .lock()
+            .map_err(|e| format!("Failed to lock sessions: {}", e))?;
+
+        let session = sessions.get(session_id)
+            .ok_or_else(|| format!("Session '{}' not found", session_id))?;
+
+        match &session.config {
+            AsyncTransportConfig::Udp { .. } => {}
+            _ => return Err("join_multicast_v6 is only available for UDP sessions".to_string()),
+        }
+
+        let tx = session.tx.clone();
+        drop(sessions);
+
+        tx.blocking_send(SessionCommand::JoinMulticastV6 { multiaddr, iface })
+            .map_err(|e| format!("Failed to send join_multicast_v6 command: {}", e))
+    }
+
+    /// 离开 IPv6 组播组
+    #[cfg(feature = "udp")]
+    pub fn leave_multicast_v6(&self, session_id: &str, multiaddr: std::net::Ipv6Addr, iface: u32) -> Result<(), String> {
+        let sessions = self
+            .sessions
+            .lock()
+            .map_err(|e| format!("Failed to lock sessions: {}", e))?;
+
+        let session = sessions.get(session_id)
+            .ok_or_else(|| format!("Session '{}' not found", session_id))?;
+
+        match &session.config {
+            AsyncTransportConfig::Udp { .. } => {}
+            _ => return Err("leave_multicast_v6 is only available for UDP sessions".to_string()),
+        }
+
+        let tx = session.tx.clone();
+        drop(sessions);
+
+        tx.blocking_send(SessionCommand::LeaveMulticastV6 { multiaddr, iface })
+            .map_err(|e| format!("Failed to send leave_multicast_v6 command: {}", e))
+    }
+
+    // ============================================================
     // 内部辅助方法
     // ============================================================
 
@@ -434,6 +584,51 @@ impl SessionTransport {
         }
     }
 
+    /// 设置广播模式（仅对 Udp 变体有效）
+    #[cfg(feature = "udp")]
+    fn set_broadcast(&self, flag: bool) -> Result<(), crate::TransportError> {
+        match self {
+            SessionTransport::Udp(u) => u.set_broadcast(flag),
+            _ => Err(crate::TransportError::Config("set_broadcast is only available for UDP".into())),
+        }
+    }
+
+    /// 加入 IPv4 组播组（仅对 Udp 变体有效）
+    #[cfg(feature = "udp")]
+    fn join_multicast_v4(&self, multiaddr: std::net::Ipv4Addr, iface: std::net::Ipv4Addr) -> Result<(), crate::TransportError> {
+        match self {
+            SessionTransport::Udp(u) => u.join_multicast_v4(multiaddr, iface),
+            _ => Err(crate::TransportError::Config("join_multicast_v4 is only available for UDP".into())),
+        }
+    }
+
+    /// 离开 IPv4 组播组（仅对 Udp 变体有效）
+    #[cfg(feature = "udp")]
+    fn leave_multicast_v4(&self, multiaddr: std::net::Ipv4Addr, iface: std::net::Ipv4Addr) -> Result<(), crate::TransportError> {
+        match self {
+            SessionTransport::Udp(u) => u.leave_multicast_v4(multiaddr, iface),
+            _ => Err(crate::TransportError::Config("leave_multicast_v4 is only available for UDP".into())),
+        }
+    }
+
+    /// 加入 IPv6 组播组（仅对 Udp 变体有效）
+    #[cfg(feature = "udp")]
+    fn join_multicast_v6(&self, multiaddr: std::net::Ipv6Addr, iface: u32) -> Result<(), crate::TransportError> {
+        match self {
+            SessionTransport::Udp(u) => u.join_multicast_v6(multiaddr, iface),
+            _ => Err(crate::TransportError::Config("join_multicast_v6 is only available for UDP".into())),
+        }
+    }
+
+    /// 离开 IPv6 组播组（仅对 Udp 变体有效）
+    #[cfg(feature = "udp")]
+    fn leave_multicast_v6(&self, multiaddr: std::net::Ipv6Addr, iface: u32) -> Result<(), crate::TransportError> {
+        match self {
+            SessionTransport::Udp(u) => u.leave_multicast_v6(multiaddr, iface),
+            _ => Err(crate::TransportError::Config("leave_multicast_v6 is only available for UDP".into())),
+        }
+    }
+
     /// 关闭传输
     async fn shutdown(&mut self) -> std::io::Result<()> {
         use tokio::io::AsyncWriteExt;
@@ -446,6 +641,7 @@ impl SessionTransport {
     }
 
     /// 获取本地地址
+    #[allow(dead_code)]
     fn local_addr(&self) -> Option<SocketAddr> {
         match self {
             SessionTransport::Tcp(t) => t.local_addr(),
@@ -456,6 +652,7 @@ impl SessionTransport {
     }
 
     /// 获取对端地址
+    #[allow(dead_code)]
     fn peer_addr(&self) -> Option<SocketAddr> {
         match self {
             SessionTransport::Tcp(t) => t.peer_addr(),
@@ -677,7 +874,87 @@ async fn FunEvent_handle_command(
                 }
             }
             #[cfg(not(feature = "udp"))]
-            let _ = (data, addr); // 抑制未使用警告
+            let _ = (data, addr);
+            false
+        }
+        Some(SessionCommand::SetBroadcast { flag }) => {
+            #[cfg(feature = "udp")]
+            match transport.set_broadcast(flag) {
+                Ok(()) => {
+                    log::trace!("[{}] set_broadcast({}) ok", session_id, flag);
+                }
+                Err(e) => {
+                    let msg = format!("SetBroadcast error: {}", e);
+                    log::warn!("[{}] {}", session_id, msg);
+                    let _ = tx_event.send(SessionEvent::Error { message: msg }).await;
+                }
+            }
+            #[cfg(not(feature = "udp"))]
+            let _ = flag;
+            false
+        }
+        Some(SessionCommand::JoinMulticastV4 { multiaddr, iface }) => {
+            #[cfg(feature = "udp")]
+            match transport.join_multicast_v4(multiaddr, iface) {
+                Ok(()) => {
+                    log::trace!("[{}] join_multicast_v4({}) ok", session_id, multiaddr);
+                }
+                Err(e) => {
+                    let msg = format!("JoinMulticastV4 error: {}", e);
+                    log::warn!("[{}] {}", session_id, msg);
+                    let _ = tx_event.send(SessionEvent::Error { message: msg }).await;
+                }
+            }
+            #[cfg(not(feature = "udp"))]
+            let _ = (multiaddr, iface);
+            false
+        }
+        Some(SessionCommand::LeaveMulticastV4 { multiaddr, iface }) => {
+            #[cfg(feature = "udp")]
+            match transport.leave_multicast_v4(multiaddr, iface) {
+                Ok(()) => {
+                    log::trace!("[{}] leave_multicast_v4({}) ok", session_id, multiaddr);
+                }
+                Err(e) => {
+                    let msg = format!("LeaveMulticastV4 error: {}", e);
+                    log::warn!("[{}] {}", session_id, msg);
+                    let _ = tx_event.send(SessionEvent::Error { message: msg }).await;
+                }
+            }
+            #[cfg(not(feature = "udp"))]
+            let _ = (multiaddr, iface);
+            false
+        }
+        Some(SessionCommand::JoinMulticastV6 { multiaddr, iface }) => {
+            #[cfg(feature = "udp")]
+            match transport.join_multicast_v6(multiaddr, iface) {
+                Ok(()) => {
+                    log::trace!("[{}] join_multicast_v6({}) ok", session_id, multiaddr);
+                }
+                Err(e) => {
+                    let msg = format!("JoinMulticastV6 error: {}", e);
+                    log::warn!("[{}] {}", session_id, msg);
+                    let _ = tx_event.send(SessionEvent::Error { message: msg }).await;
+                }
+            }
+            #[cfg(not(feature = "udp"))]
+            let _ = (multiaddr, iface);
+            false
+        }
+        Some(SessionCommand::LeaveMulticastV6 { multiaddr, iface }) => {
+            #[cfg(feature = "udp")]
+            match transport.leave_multicast_v6(multiaddr, iface) {
+                Ok(()) => {
+                    log::trace!("[{}] leave_multicast_v6({}) ok", session_id, multiaddr);
+                }
+                Err(e) => {
+                    let msg = format!("LeaveMulticastV6 error: {}", e);
+                    log::warn!("[{}] {}", session_id, msg);
+                    let _ = tx_event.send(SessionEvent::Error { message: msg }).await;
+                }
+            }
+            #[cfg(not(feature = "udp"))]
+            let _ = (multiaddr, iface);
             false
         }
         Some(SessionCommand::Close) => {

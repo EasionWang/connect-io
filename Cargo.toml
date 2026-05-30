@@ -1,6 +1,6 @@
 [package]
 name = "connect-io"
-version = "0.1.4"
+version = "0.1.5"
 edition = "2024"
 description = "Unified async/sync transport library for TCP, UDP, and Serial protocols"
 license = "MIT"
@@ -18,7 +18,7 @@ tauri = ["dep:tauri", "dep:serde", "dep:serde_json", "async"]
 serialport = { version = "4.3", optional = true }
 thiserror = "1"
 log = "0.4"
-tokio = { version = "1", features = ["rt-multi-thread", "macros", "io-util"], optional = true }
+tokio = { version = "1", features = ["rt-multi-thread", "macros", "io-util", "time"], optional = true }
 async-trait = { version = "0.1", optional = true }
 tokio-serial = { version = "5.4", optional = true }
 tauri = { version = "2", optional = true }

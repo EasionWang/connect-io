@@ -392,6 +392,7 @@ pub fn create_transport(config: TransportConfig) -> Result<Box<dyn Transport>, T
 pub use async_impl::{AsyncTransportConfig, AsyncTcpTransport, AsyncUdpTransport, AsyncSerialTransport, AsyncTcpServerManager, create_async_transport};
 
 #[cfg(test)]
+#[allow(non_snake_case)]
 mod tests {
     use super::*;
     use std::net::SocketAddr;

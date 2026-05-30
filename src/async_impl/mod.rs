@@ -19,7 +19,7 @@ use crate::{ConnectionState, TransportError};
 use async_trait::async_trait;
 use std::net::SocketAddr;
 use std::time::Duration;
-use tokio::io::{AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt};
+use tokio::io::{AsyncRead, AsyncWrite};
 
 #[cfg(feature = "serial")]
 use serialport::{DataBits, StopBits, Parity, FlowControl};
@@ -273,23 +273,23 @@ pub use serial::AsyncSerialTransport;
 /// // 使用 transport 进行异步通信...
 /// transport.close().await?;
 /// ```
-pub fn create_async_transport(
+pub async fn create_async_transport(
     config: AsyncTransportConfig,
 ) -> Result<Box<dyn AsyncTransport>, TransportError> {
     match &config {
         #[cfg(feature = "tcp")]
         AsyncTransportConfig::TcpClient { .. } | AsyncTransportConfig::TcpServer { .. } => {
-            let transport = AsyncTcpTransport::connect(config)?;
+            let transport = AsyncTcpTransport::connect(config).await?;
             Ok(Box::new(transport))
         }
         #[cfg(feature = "udp")]
         AsyncTransportConfig::Udp { .. } => {
-            let transport = AsyncUdpTransport::connect(config)?;
+            let transport = AsyncUdpTransport::connect(config).await?;
             Ok(Box::new(transport))
         }
         #[cfg(feature = "serial")]
         AsyncTransportConfig::Serial { .. } => {
-            let transport = AsyncSerialTransport::connect(config)?;
+            let transport = AsyncSerialTransport::connect(config).await?;
             Ok(Box::new(transport))
         }
         #[cfg(not(feature = "tcp"))]

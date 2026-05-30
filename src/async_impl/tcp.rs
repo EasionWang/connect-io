@@ -11,7 +11,7 @@ use crate::TransportError;
 use async_trait::async_trait;
 use std::net::SocketAddr;
 use std::time::Duration;
-use tokio::io::{AsyncRead, AsyncWrite};
+use tokio::io::{AsyncRead, AsyncWrite, AsyncWriteExt};
 use tokio::net::{TcpListener, TcpStream};
 
 /// 异步 TCP 传输实现
@@ -47,6 +47,12 @@ use tokio::net::{TcpListener, TcpStream};
 /// ```
 pub struct AsyncTcpTransport {
     stream: Option<TcpStream>,
+}
+
+impl Default for AsyncTcpTransport {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl AsyncTcpTransport {
@@ -115,8 +121,8 @@ impl AsyncTransport for AsyncTcpTransport {
     /// # Returns
     /// 始终返回 `Ok(())`（shutdown 失败被静默忽略）
     async fn close(&mut self) -> Result<(), TransportError> {
-        if let Some(stream) = self.stream.take() {
-            let _ = stream.shutdown();
+        if let Some(mut stream) = self.stream.take() {
+            let _ = stream.shutdown().await;
         }
         Ok(())
     }

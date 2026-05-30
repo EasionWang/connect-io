@@ -85,6 +85,7 @@ pub enum TransportError {
 }
 
 #[cfg(test)]
+#[allow(non_snake_case)]
 mod tests {
     use super::*;
 
@@ -149,7 +150,7 @@ mod tests {
     fn FunEvent_display_serial_error_format() {
         // serialport::Error 实现了 Display，我们验证格式化链正确
         // 由于无法轻易构造真实的 Serial Error，这里仅验证变体存在且可格式化
-        let dummy_msg = "simulated serial error";
+        let _dummy_msg = "simulated serial error";
         // 通过 String 构造来间接测试 -- 注意我们不能直接构造 serialport::Error
         // 所以我们用 from 转换路径来验证
         // 实际上 serialport::Error 不支持从 String 直接构造

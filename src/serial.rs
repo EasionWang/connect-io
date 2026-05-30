@@ -131,7 +131,7 @@ impl Transport for SerialTransport {
     fn set_timeout(&mut self, timeout: Option<Duration>) -> Result<(), TransportError> {
         self.port
             .set_timeout(timeout.unwrap_or(Duration::from_millis(100)))
-            .map_err(|e| TransportError::Serial(e))?;
+            .map_err(TransportError::Serial)?;
         Ok(())
     }
 

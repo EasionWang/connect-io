@@ -8,7 +8,7 @@
  */
 use crate::{ConnectionState, Transport, TransportConfig, TransportError};
 use std::io::{Read, Write};
-use std::net::{SocketAddr, UdpSocket};
+use std::net::{Ipv4Addr, Ipv6Addr, SocketAddr, UdpSocket};
 use std::time::Duration;
 
 /// UDP 传输实现（同步）
@@ -244,5 +244,173 @@ impl UdpTransport {
     pub fn recv_from(&self, buf: &mut [u8]) -> Result<(usize, SocketAddr), TransportError> {
         let (n, addr) = self.socket.recv_from(buf)?;
         Ok((n, addr))
+    }
+
+    // ============================================================
+    // 广播
+    // ============================================================
+
+    /// 设置 UDP socket 的广播模式
+    ///
+    /// 启用后，socket 可以向广播地址（如 255.255.255.255）发送数据报。
+    /// 默认情况下广播是关闭的。
+    ///
+    /// # Arguments
+    /// * `flag` - true 启用广播，false 禁用
+    ///
+    /// # Returns
+    /// - `Ok(())` - 设置成功
+    /// - `Err(Io(...))` - 系统调用失败
+    ///
+    /// # Example
+    /// ```ignore
+    /// let transport = UdpTransport::connect(config)?;
+    /// transport.set_broadcast(true)?;
+    /// transport.send_to(b"Hello", "255.255.255.255:9000".parse()?)?;
+    /// ```
+    pub fn set_broadcast(&self, flag: bool) -> Result<(), TransportError> {
+        self.socket.set_broadcast(flag)?;
+        Ok(())
+    }
+
+    // ============================================================
+    // 组播 (IPv4)
+    // ============================================================
+
+    /// 加入 IPv4 组播组
+    ///
+    /// 将 socket 加入指定的 IPv4 组播地址，之后可以接收发往该组播地址的数据报。
+    /// 调用前需确保 socket 已正确绑定。
+    ///
+    /// # Arguments
+    /// * `multiaddr` - 要加入的组播地址（如 224.0.0.1）
+    /// * `iface` - 加入组播组使用的本地接口地址（如 0.0.0.0 表示任意接口）
+    ///
+    /// # Returns
+    /// - `Ok(())` - 加入成功
+    /// - `Err(Io(...))` - 加入失败（地址不是组播地址、接口不存在等）
+    ///
+    /// # Example
+    /// ```ignore
+    /// let transport = UdpTransport::connect(config)?;
+    /// transport.join_multicast_v4(
+    ///     "224.0.0.1".parse()?,
+    ///     "0.0.0.0".parse()?,
+    /// )?;
+    /// ```
+    pub fn join_multicast_v4(
+        &self,
+        multiaddr: Ipv4Addr,
+        iface: Ipv4Addr,
+    ) -> Result<(), TransportError> {
+        self.socket.join_multicast_v4(&multiaddr, &iface)?;
+        Ok(())
+    }
+
+    /// 离开 IPv4 组播组
+    ///
+    /// 将 socket 从指定的 IPv4 组播地址中移除，不再接收该组播的数据报。
+    ///
+    /// # Arguments
+    /// * `multiaddr` - 要离开的组播地址
+    /// * `iface` - 离开组播组使用的本地接口地址
+    ///
+    /// # Returns
+    /// - `Ok(())` - 离开成功
+    /// - `Err(Io(...))` - 离开失败
+    pub fn leave_multicast_v4(
+        &self,
+        multiaddr: Ipv4Addr,
+        iface: Ipv4Addr,
+    ) -> Result<(), TransportError> {
+        self.socket.leave_multicast_v4(&multiaddr, &iface)?;
+        Ok(())
+    }
+
+    /// 设置 IPv4 组播数据是否回环到本地 socket
+    ///
+    /// 启用后，本机发送的组播数据也会被本机接收。
+    /// 默认值取决于操作系统。
+    ///
+    /// # Arguments
+    /// * `flag` - true 启用回环，false 禁用
+    ///
+    /// # Returns
+    /// - `Ok(())` - 设置成功
+    /// - `Err(Io(...))` - 系统调用失败
+    pub fn set_multicast_loop_v4(&self, flag: bool) -> Result<(), TransportError> {
+        self.socket.set_multicast_loop_v4(flag)?;
+        Ok(())
+    }
+
+    /// 设置 IPv4 组播数据报的 TTL（生存时间）
+    ///
+    /// 控制组播数据报在网络中经过的最大路由器跳数。
+    /// 默认值通常为 1，即仅在本地网络内传播。
+    ///
+    /// # Arguments
+    /// * `ttl` - TTL 值（1-255），1 表示仅本地网络
+    ///
+    /// # Returns
+    /// - `Ok(())` - 设置成功
+    /// - `Err(Io(...))` - 系统调用失败
+    pub fn set_multicast_ttl_v4(&self, ttl: u32) -> Result<(), TransportError> {
+        self.socket.set_multicast_ttl_v4(ttl)?;
+        Ok(())
+    }
+
+    // ============================================================
+    // 组播 (IPv6)
+    // ============================================================
+
+    /// 加入 IPv6 组播组
+    ///
+    /// 将 socket 加入指定的 IPv6 组播地址。
+    ///
+    /// # Arguments
+    /// * `multiaddr` - 要加入的 IPv6 组播地址（如 ff02::1）
+    /// * `iface` - 接口索引（0 表示默认接口）
+    ///
+    /// # Returns
+    /// - `Ok(())` - 加入成功
+    /// - `Err(Io(...))` - 加入失败
+    pub fn join_multicast_v6(
+        &self,
+        multiaddr: Ipv6Addr,
+        iface: u32,
+    ) -> Result<(), TransportError> {
+        self.socket.join_multicast_v6(&multiaddr, iface)?;
+        Ok(())
+    }
+
+    /// 离开 IPv6 组播组
+    ///
+    /// # Arguments
+    /// * `multiaddr` - 要离开的 IPv6 组播地址
+    /// * `iface` - 接口索引
+    ///
+    /// # Returns
+    /// - `Ok(())` - 离开成功
+    /// - `Err(Io(...))` - 离开失败
+    pub fn leave_multicast_v6(
+        &self,
+        multiaddr: Ipv6Addr,
+        iface: u32,
+    ) -> Result<(), TransportError> {
+        self.socket.leave_multicast_v6(&multiaddr, iface)?;
+        Ok(())
+    }
+
+    /// 设置 IPv6 组播数据是否回环到本地 socket
+    ///
+    /// # Arguments
+    /// * `flag` - true 启用回环，false 禁用
+    ///
+    /// # Returns
+    /// - `Ok(())` - 设置成功
+    /// - `Err(Io(...))` - 系统调用失败
+    pub fn set_multicast_loop_v6(&self, flag: bool) -> Result<(), TransportError> {
+        self.socket.set_multicast_loop_v6(flag)?;
+        Ok(())
     }
 }

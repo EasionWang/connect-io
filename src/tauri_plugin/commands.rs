@@ -6,6 +6,7 @@
  * @LastEditTime : 2026-05-30
  * @Description  : Tauri 集成层命令定义，提供前端可调用的 IPC 接口
  */
+#![allow(non_snake_case)]
 
 use serde::{Deserialize, Serialize};
 
@@ -160,8 +161,6 @@ impl TryFrom<TransportConnectConfig> for AsyncTransportConfig {
                 parity,
                 flow_control,
             } => {
-                use serialport::{DataBits, FlowControl, Parity, StopBits};
-
                 let data_bits = FunEvent_parse_data_bits(data_bits)?;
                 let stop_bits = FunEvent_parse_stop_bits(stop_bits)?;
                 let parity = FunEvent_parse_parity(&parity)?;
@@ -220,9 +219,7 @@ fn FunEvent_parse_parity(value: &str) -> Result<serialport::Parity, String> {
         "NONE" | "N" => Ok(serialport::Parity::None),
         "ODD" | "O" => Ok(serialport::Parity::Odd),
         "EVEN" | "E" => Ok(serialport::Parity::Even),
-        "MARK" | "M" => Ok(serialport::Parity::Mark),
-        "SPACE" | "S" => Ok(serialport::Parity::Space),
-        other => Err(format!("Invalid parity '{}', expected None/Odd/Even/Mark/Space", other)),
+        other => Err(format!("Invalid parity '{}', expected None/Odd/Even", other)),
     }
 }
 
@@ -230,10 +227,10 @@ fn FunEvent_parse_parity(value: &str) -> Result<serialport::Parity, String> {
 fn FunEvent_parse_flow_control(value: &str) -> Result<serialport::FlowControl, String> {
     match value.to_uppercase().as_str() {
         "NONE" => Ok(serialport::FlowControl::None),
-        "RTS/CTS" | "HARDWARE" => Ok(serialport::FlowControl::RtsCts),
-        "XON/XOFF" | "SOFTWARE" => Ok(serialport::FlowControl::XonXoff),
+        "RTS/CTS" | "HARDWARE" => Ok(serialport::FlowControl::Hardware),
+        "XON/XOFF" | "SOFTWARE" => Ok(serialport::FlowControl::Software),
         other => Err(format!(
-            "Invalid flow_control '{}', expected None/RtsCts/XonXoff",
+            "Invalid flow_control '{}', expected None/Hardware/Software",
             other
         )),
     }
@@ -415,6 +412,122 @@ pub async fn FunEvent_transport_read(
         result.extend_from_slice(&chunk);
     }
     Ok(result)
+}
+
+// ============================================================
+// UDP 广播 / 组播命令
+// ============================================================
+
+/// 设置 UDP 会话的广播模式
+///
+/// 启用后，可以向广播地址（如 255.255.255.255）发送数据报。
+///
+/// # 参数
+/// - `session_id`: UDP 会话 ID
+/// - `flag`: true 启用广播，false 禁用
+///
+/// # 返回
+/// - `Ok(())`: 设置成功
+/// - `Err(String)`: session 不存在或非 UDP 会话
+#[tauri::command]
+pub async fn BtnEvent_transport_set_broadcast(
+    state: tauri::State<'_, TransportState>,
+    session_id: String,
+    flag: bool,
+) -> Result<(), String> {
+    state.set_broadcast(&session_id, flag)
+}
+
+/// 加入 IPv4 组播组
+///
+/// # 参数
+/// - `session_id`: UDP 会话 ID
+/// - `multiaddr`: 组播地址（如 "224.0.0.1"）
+/// - `iface`: 本地接口地址（如 "0.0.0.0" 表示任意接口）
+///
+/// # 返回
+/// - `Ok(())`: 加入成功
+/// - `Err(String)`: 加入失败
+#[tauri::command]
+pub async fn BtnEvent_transport_join_multicast_v4(
+    state: tauri::State<'_, TransportState>,
+    session_id: String,
+    multiaddr: String,
+    iface: String,
+) -> Result<(), String> {
+    let multiaddr = multiaddr.parse::<std::net::Ipv4Addr>()
+        .map_err(|e| format!("Invalid multicast address: {}", e))?;
+    let iface = iface.parse::<std::net::Ipv4Addr>()
+        .map_err(|e| format!("Invalid interface address: {}", e))?;
+    state.join_multicast_v4(&session_id, multiaddr, iface)
+}
+
+/// 离开 IPv4 组播组
+///
+/// # 参数
+/// - `session_id`: UDP 会话 ID
+/// - `multiaddr`: 组播地址
+/// - `iface`: 本地接口地址
+///
+/// # 返回
+/// - `Ok(())`: 离开成功
+/// - `Err(String)`: 离开失败
+#[tauri::command]
+pub async fn BtnEvent_transport_leave_multicast_v4(
+    state: tauri::State<'_, TransportState>,
+    session_id: String,
+    multiaddr: String,
+    iface: String,
+) -> Result<(), String> {
+    let multiaddr = multiaddr.parse::<std::net::Ipv4Addr>()
+        .map_err(|e| format!("Invalid multicast address: {}", e))?;
+    let iface = iface.parse::<std::net::Ipv4Addr>()
+        .map_err(|e| format!("Invalid interface address: {}", e))?;
+    state.leave_multicast_v4(&session_id, multiaddr, iface)
+}
+
+/// 加入 IPv6 组播组
+///
+/// # 参数
+/// - `session_id`: UDP 会话 ID
+/// - `multiaddr`: IPv6 组播地址（如 "ff02::1"）
+/// - `iface`: 接口索引（0 表示默认接口）
+///
+/// # 返回
+/// - `Ok(())`: 加入成功
+/// - `Err(String)`: 加入失败
+#[tauri::command]
+pub async fn BtnEvent_transport_join_multicast_v6(
+    state: tauri::State<'_, TransportState>,
+    session_id: String,
+    multiaddr: String,
+    iface: u32,
+) -> Result<(), String> {
+    let multiaddr = multiaddr.parse::<std::net::Ipv6Addr>()
+        .map_err(|e| format!("Invalid IPv6 multicast address: {}", e))?;
+    state.join_multicast_v6(&session_id, multiaddr, iface)
+}
+
+/// 离开 IPv6 组播组
+///
+/// # 参数
+/// - `session_id`: UDP 会话 ID
+/// - `multiaddr`: IPv6 组播地址
+/// - `iface`: 接口索引
+///
+/// # 返回
+/// - `Ok(())`: 离开成功
+/// - `Err(String)`: 离开失败
+#[tauri::command]
+pub async fn BtnEvent_transport_leave_multicast_v6(
+    state: tauri::State<'_, TransportState>,
+    session_id: String,
+    multiaddr: String,
+    iface: u32,
+) -> Result<(), String> {
+    let multiaddr = multiaddr.parse::<std::net::Ipv6Addr>()
+        .map_err(|e| format!("Invalid IPv6 multicast address: {}", e))?;
+    state.leave_multicast_v6(&session_id, multiaddr, iface)
 }
 
 /// UDP 无连接模式：向指定地址发送数据
