@@ -3,7 +3,7 @@
  * @Date         : 2026-05-29 18:32:48
  * @FilePath     : /connect-io/src/async_impl/tcp.rs
  * @LastEditors  : Easion_Wang Easion.YX@outlook.com
- * @LastEditTime : 2026-05-30 15:17:19
+ * @LastEditTime : 2026-05-30 15:52:44
  * @Description  : 异步 TCP 传输实现
  */
 use crate::async_impl::{AsyncTransport, AsyncTransportConfig, ConnectionState};
@@ -59,6 +59,16 @@ impl AsyncTcpTransport {
     /// 未连接的 `AsyncTcpTransport` 实例
     pub fn new() -> Self {
         Self { stream: None }
+    }
+
+    /// 从已有的 tokio TcpStream 创建已连接的 AsyncTcpTransport 实例
+    ///
+    /// 供内部组件（如 AsyncTcpServerManager）在 accept 后构造实例使用。
+    ///
+    /// # Arguments
+    /// * `stream` - 已连接的 tokio TCP 流
+    pub fn from_stream(stream: tokio::net::TcpStream) -> Self {
+        Self { stream: Some(stream) }
     }
 }
 

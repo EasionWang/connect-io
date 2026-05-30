@@ -3,7 +3,7 @@
  * @Date         : 2026-05-30 00:00:00
  * @FilePath     : /connect-io/src/tcp_server.rs
  * @LastEditors  : Easion_Wang Easion.YX@outlook.com
- * @LastEditTime : 2026-05-30 00:00:00
+ * @LastEditTime : 2026-05-30 15:52:27
  * @Description  : 同步 TCP 服务端多连接管理器
  */
 use crate::tcp::TcpTransport;
@@ -93,7 +93,7 @@ impl TcpServerManager {
         let (stream, _peer_addr) = self.listener.accept()?;
         stream.set_read_timeout(Some(Duration::from_secs(5)))?;
         stream.set_write_timeout(Some(Duration::from_secs(5)))?;
-        Ok(TcpTransport { stream })
+        Ok(TcpTransport::from_stream(stream))
     }
 
     /// 获取监听器本地绑定的地址

@@ -3,7 +3,7 @@
  * @Date         : 2026-05-30 00:00:00
  * @FilePath     : /connect-io/src/async_impl/tcp_server.rs
  * @LastEditors  : Easion_Wang Easion.YX@outlook.com
- * @LastEditTime : 2026-05-30 15:24:15
+ * @LastEditTime : 2026-05-30 15:52:50
  * @Description  : 异步 TCP 服务端多连接管理器
  */
 use crate::async_impl::tcp::AsyncTcpTransport;
@@ -93,7 +93,7 @@ impl AsyncTcpServerManager {
     pub async fn accept(&self) -> Result<AsyncTcpTransport, TransportError> {
         let (stream, _peer_addr) = self.listener.accept().await
             .map_err(|e| TransportError::ConnectionFailed(e.to_string()))?;
-        Ok(AsyncTcpTransport { stream: Some(stream) })
+        Ok(AsyncTcpTransport::from_stream(stream))
     }
 
     /// 获取异步监听器本地绑定的地址

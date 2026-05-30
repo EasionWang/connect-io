@@ -3,7 +3,7 @@
  * @Date         : 2026-05-29 18:32:48
  * @FilePath     : /connect-io/src/tcp.rs
  * @LastEditors  : Easion_Wang Easion.YX@outlook.com
- * @LastEditTime : 2026-05-30 14:13:52
+ * @LastEditTime : 2026-05-30 15:52:19
  * @Description  : 
  */
 use crate::{ConnectionState, Transport, TransportConfig, TransportError};
@@ -45,6 +45,19 @@ use std::time::Duration;
 /// ```
 pub struct TcpTransport {
     stream: TcpStream,
+}
+
+impl TcpTransport {
+    /// 从已有的 TcpStream 创建 TcpTransport 实例
+    ///
+    /// 供内部组件（如 TcpServerManager）在 accept 后构造实例使用。
+    /// 不设置额外超时，调用者应自行配置。
+    ///
+    /// # Arguments
+    /// * `stream` - 已连接的 TCP 流
+    pub fn from_stream(stream: TcpStream) -> Self {
+        Self { stream }
+    }
 }
 
 impl Transport for TcpTransport {
